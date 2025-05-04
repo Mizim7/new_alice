@@ -1,64 +1,57 @@
 from flask import Flask, request, jsonify
-from googletrans import Translator
+from deep_translator import GoogleTranslator
 
 app = Flask(__name__)
-
-# Инициализация переводчика
-translator = Translator()
 
 
 @app.route("/", methods=["POST"])
 def main():
-    # Получаем данные из запроса
     data = request.json
-
-    # Обработка запроса
     response = handle_request(data)
-
-    # Возвращаем ответ в формате JSON
     return jsonify(response)
 
 
-def handle_request(request):
-    # Получаем текст запроса пользователя
-    user_input = request["request"]["original_utterance"].lower()
+def handle_request(request_data):
+    session = request_data["session"]
+    user_input = request_data["request"]["original_utterance"].lower().strip()
 
-    # Проверяем, содержит ли запрос фразу "переведи слово"
+    if session["new"] or not user_input:
+        return build_response("Привет! Я могу перевести слово. Скажите: 'Переведи слово *слово*'.", session)
+
     if "переведи слово" in user_input:
-        # Извлекаем слово для перевода
         word_to_translate = user_input.replace("переведи слово", "").strip()
 
         if not word_to_translate:
-            response_text = "Пожалуйста, укажите слово для перевода."
-        else:
-            # Переводим слово
-            translated_word = translate_word(word_to_translate)
-            response_text = translated_word or "Не удалось перевести слово."
-    else:
-        response_text = "Я могу перевести слово. Скажите: 'Переведи слово *слово*'."
+            return build_response("Пожалуйста, укажите слово для перевода.", session)
 
-    response = {
+        translated = translate_word(word_to_translate)
+        if translated:
+            return build_response(translated, session)
+        else:
+            return build_response("Не удалось перевести слово.", session)
+
+    return build_response("Я могу перевести слово. Скажите: 'Переведи слово *слово*'.", session)
+
+
+def build_response(text, session):
+    return {
         "response": {
-            "text": response_text,
-            "tts": response_text,
+            "text": text,
+            "tts": text,
             "end_session": False
         },
         "session": {
-            "session_id": request["session"]["session_id"],
-            "message_id": request["session"]["message_id"],
-            "user_id": request["session"]["user"]["user_id"]
+            "session_id": session["session_id"],
+            "message_id": session["message_id"],
+            "user_id": session["user"]["user_id"]
         },
         "version": "1.0"
     }
 
-    return response
-
 
 def translate_word(word):
     try:
-        # Переводим слово на английский язык
-        translation = translator.translate(word, src="ru", dest="en")
-        return translation.text
+        return GoogleTranslator(source='ru', target='en').translate(word)
     except Exception as e:
         print(f"Ошибка при переводе: {e}")
         return None
